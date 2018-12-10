@@ -1,1 +1,1 @@
-# DigitalImageProcessing 236860 @ CS, Technion
+# Digital Image Processing 236860 @ CS, Technion
