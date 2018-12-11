@@ -32,7 +32,7 @@ def visualize_motion_paths(X, Y, show=True):
 def visualize_psfs(psfs, show=True):
     num_psfs = len(psfs)
     dim = int(math.ceil(math.sqrt(num_psfs)))
-    visualize_multiple_common(dim, lambda ax, i: ax.imshow(cv2.flip(psfs[i], 0), cmap='gray'),  # Note vert the flip.
+    visualize_multiple_common(dim, lambda ax, i: ax.imshow(cv2.flip(psfs[i], 0), cmap='gray'),  # Note the vert flip.
                               'psfs', 'Generated PSFs', show)
 
 

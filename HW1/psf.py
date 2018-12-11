@@ -30,7 +30,7 @@ def psf_fine(x, y, psf):
 
 def generate_psfs(X, Y, granularity_method):
     max_shift = math.ceil(max(np.max(np.abs(X)), np.max(np.abs(Y))))  # this is the maximal shift a camera has.
-    rect_size = int(2 * (max_shift + 1)) + 1  # this ensures that the shift is within the rect and a center is defined.
+    rect_size = int(2 * max_shift) + 1  # this ensures that the shift is within the rect and a center is defined.
     num_psfs, num_samples_per_motion = X.shape
     print("Generating {} PSFs of size: {}x{} each".format(num_psfs, rect_size, rect_size))
     center_offset = max_shift  # convenience.
@@ -46,7 +46,7 @@ def generate_psfs(X, Y, granularity_method):
     return psfs
 
 
-def test_psf_fine():
+def test_psf_fine_1():
     x = 5.06
     y = 4.1
     psf = np.zeros((10, 10))
@@ -57,16 +57,14 @@ def test_psf_fine():
     np.testing.assert_almost_equal(psf[5, 6], 0.06 * 0.1)  # bottom right
 
 
-def plot_test_psf_adv():
-    X = np.arange(100).reshape((1, 100))
-    X[0, -1] = 0.0
-    Y = np.zeros(100).reshape((1, 100))
+def test_psf_fine_2():
+    X = np.zeros((1, 10), dtype=float) + 1e-9
+    Y = np.copy(X)
     psf = generate_psfs(X, Y, psf_fine)[0]
-    plt.imshow(psf)
-    plt.show()
+    np.testing.assert_almost_equal(psf, np.array([[0, 0, 0], [0, 1, 0], [0, 0, 0]], dtype=float))
     pass
 
 
 if __name__ == '__main__':
-    test_psf_fine()
-    # plot_test_psf_adv()
+    test_psf_fine_1()
+    test_psf_fine_2()
