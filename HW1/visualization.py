@@ -4,6 +4,7 @@ import os
 
 import numpy as np
 import matplotlib.pyplot as plt
+from skimage.measure import compare_psnr
 
 
 def visualize_multiple_common(dim, ax_index_action, file_name, title=None, show=True):
@@ -45,3 +46,18 @@ def visualize_images(images, directory, file_name_prefix, title_prefix='', show=
         if show:
             plt.show()
         plt.clf()
+
+
+def visualize_psnrs(original_image, blurred_images, deblurred_images, show=False):
+    blurred_psnrs = np.array([compare_psnr(original_image, blurred_image) for blurred_image in blurred_images])
+    deblurred_psnrs = np.array([compare_psnr(original_image, deblurred_image) for deblurred_image in deblurred_images])
+    plt.plot(blurred_psnrs, label="blurred")
+    plt.plot(deblurred_psnrs, label="deblurred")
+    plt.legend()
+    plt.title("accumulated deblurred PSNR vs. blurred PSNR")
+    plt.xlabel("blurred: image-wise (image index),\ndeblurred: accumulated number of images")
+    plt.ylabel("PSNR value")
+    plt.savefig(os.path.join('plots', 'psnr_comparison'))
+    if show:
+        plt.show()
+    plt.clf()
