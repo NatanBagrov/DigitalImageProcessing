@@ -56,7 +56,7 @@ def visualize_psnrs(original_image, blurred_images, deblurred_images, show=False
     plt.plot(deblurred_psnrs, label="deblurred")
     plt.legend()
     plt.title("accumulated deblurred PSNR vs. blurred PSNR")
-    plt.xlabel("blurred: image-wise (image index),\ndeblurred: accumulated number of images")
+    plt.xlabel("blurred: image-wise (image index),  deblurred: accumulated number of images")
     plt.ylabel("PSNR value")
     plt.savefig(os.path.join('plots', 'psnr_comparison'))
     if show:
