@@ -61,3 +61,4 @@ def visualize_psnrs(original_image, blurred_images, deblurred_images, show=False
     if show:
         plt.show()
     plt.clf()
+    np.savetxt(os.path.join('psnr', 'psnr_values.txt'), deblurred_psnrs, '%.3f')
