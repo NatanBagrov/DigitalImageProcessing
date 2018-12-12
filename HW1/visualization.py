@@ -4,6 +4,7 @@ import os
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cm
 from skimage.measure import compare_psnr
 
 
@@ -39,7 +40,7 @@ def visualize_psfs(psfs, show=True):
 
 def visualize_images(images, directory, file_name_prefix, title_prefix='', show=False):
     for i, image in enumerate(images):
-        plt.imshow(image)
+        plt.imshow(image, cmap='gray')
         plt.axis('off')
         plt.title('{} #{}'.format(title_prefix, i))
         plt.savefig(os.path.join(directory, '{}_{}'.format(file_name_prefix, i)))
