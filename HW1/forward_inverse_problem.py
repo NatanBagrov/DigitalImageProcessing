@@ -36,6 +36,15 @@ def estimate_fft_using_max(blurred_ffts):
     return max_fft
 
 
+def estimate_fft_using_weighted_abs_p_generator(p):
+    def f(blurred_ffts):
+        abs_ffts = np.abs(blurred_ffts) ** p
+        weights = abs_ffts / np.sum(abs_ffts, axis=0)
+        return np.sum(blurred_ffts * weights, axis=0)
+
+    return f
+
+
 def test_vertical_horizontal_perfect_deblur():
     im = read_original_image()
     v_k = 0.01
