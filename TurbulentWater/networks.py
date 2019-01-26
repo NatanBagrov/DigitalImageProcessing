@@ -162,7 +162,7 @@ class I2INet(nn.Module):
         # upsampling blocks
         self.up_blocks = nn.ModuleList()
         for i in range(n_downsample):
-            self.up_blocks.append( nn.Sequential(nn.Upsample(scale_factor=2),
+            self.up_blocks.append( nn.Sequential(nn.Upsample(scale_factor=2),  # TODO: deprecated
                            Conv2dBlock(dim, dim // 2, 5, 1, 2, norm=norm, activation=activ, pad_type=pad_type)) )
             dim //= 2
 
@@ -234,7 +234,7 @@ class vgg_features(nn.Module):
     def forward(self, x, renormalize=True):
         # change normaliztion form [-1,1] to VGG normalization
         if renormalize:
-            x = ((x*.5+.5)-torch.cuda.FloatTensor([0.485, 0.456, 0.406]).view(1,3,1,1))/torch.cuda.FloatTensor([0.229, 0.224, 0.225]).view(1,3,1,1)
+            x = ((x*.5+.5)-float_tensor([0.485, 0.456, 0.406]).view(1,3,1,1))/float_tensor([0.229, 0.224, 0.225]).view(1,3,1,1)
         return self.model(x)
 
 
@@ -336,7 +336,7 @@ class Conv2dBlock(nn.Module):
         elif norm == 'in':
             self.norm = nn.InstanceNorm2d(norm_dim)
         elif norm == 'gn':
-            self.norm = nn.GroupNorm(norm_dim/8, norm_dim)
+            self.norm = nn.GroupNorm(norm_dim//8, norm_dim)
         elif norm == 'none':
             self.norm = None
         else:
@@ -403,4 +403,10 @@ def weights_init(init_type='gaussian'):
     return init_fun
 
 
+def float_tensor(data):
+    if torch.cuda.is_available():
+        tensor = torch.cuda.FloatTensor(data)
+    else:
+        tensor = torch.FloatTensor(data)
 
+    return tensor

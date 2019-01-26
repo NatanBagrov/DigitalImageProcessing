@@ -184,9 +184,22 @@ class PairedImageFolder(data.Dataset):
 
     def __init__(self, root1, root2, loader=default_loader, extensions=IMG_EXTENSIONS, transform=None, target_transform=None):
         classes, class_to_idx = find_classes(root1)
-        samples = make_dataset(root1, class_to_idx, extensions)
-        if len(samples) == 0:
+        samples1 = make_dataset(root1, class_to_idx, extensions)
+
+        if len(samples1) == 0:
             raise(RuntimeError("Found 0 files in subfolders of: " + root1 + "\n"
+                               "Supported extensions are: " + ",".join(extensions)))
+
+        samples2 = make_dataset(root2, class_to_idx, extensions)
+
+        if len(samples1) > len(samples2):
+            samples2, samples1 = samples1, samples2
+
+        samples1 = set(samples1)
+        samples = [sample for sample in samples2 if sample in samples1]
+
+        if len(samples) == 0:
+            raise(RuntimeError("Found 0 common files in subfolders of: " + root1 + " or " + root2 + "\n"
                                "Supported extensions are: " + ",".join(extensions)))
 
         self.root1 = root1

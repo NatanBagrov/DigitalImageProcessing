@@ -116,7 +116,7 @@ def main():
 
     # model
     model = networks.Model(args)
-    model.cuda()
+    cuda_if_available(model)
 
     # load weights from checkpoint
     if args.test and not args.load:
@@ -145,8 +145,8 @@ def train(loader, model, fixed_batch, epoch, args):
 
     end_time = time.time()
     for i, ((input, target), _) in enumerate(loader):
-        input = input.cuda()
-        target = target.cuda()
+        input = cuda_if_available(input)
+        target = cuda_if_available(target)
         data_time = time.time() - end_time
 
         # take an optimization step
@@ -161,7 +161,7 @@ def train(loader, model, fixed_batch, epoch, args):
         # visualize progress
         if i % 100 == 0:
             visualize(input, target, model, os.path.join(args.outroot, '%s_train.jpg' % args.exp_name))
-            visualize(fixed_batch[0].cuda(), fixed_batch[1], model,
+            visualize(cuda_if_available(fixed_batch[0]), fixed_batch[1], model,
                       os.path.join(args.outroot, '%s_val.jpg' % args.exp_name))
             model.train()
 
@@ -186,7 +186,7 @@ def test(loader, model, args):
     with torch.no_grad():
         end_time = time.time()
         for i, data in enumerate(loader):
-            input = data[0].cuda()
+            input = cuda_if_available(data[0])
             data_time = time.time() - end_time
             x, warp, y, z = model(input, cc=False)
 
@@ -204,6 +204,13 @@ def test(loader, model, args):
 
             # if i==10:
             #    break
+
+
+def cuda_if_available(x):
+    if torch.cuda.is_available():
+        x = x.cuda()
+
+    return x
 
 
 if __name__ == '__main__':
