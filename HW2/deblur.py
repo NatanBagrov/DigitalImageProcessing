@@ -1,7 +1,9 @@
 import numpy as np
 from scipy.fftpack import fft2, ifft2
 from scipy.signal import convolve2d
-from point_spread_function import kernel_to_doubly_block_circulant
+
+from point_spread_function import gradient_doubly_block_circulant, kernel_to_doubly_block_circulant
+from optimization import alternating_direction_method_of_multipliers, de_degradation_f_step
 
 
 def get_inverse_filter(kernel):
@@ -18,7 +20,7 @@ def get_inverse_filter(kernel):
 
 
 def inverse_filter_1(blurred_image, kernel):
-    # TODO: can I apply Wienner filter in spatial domain
+    # TODO: can I apply Wienner filter in frequency domain
     kernel_frequency = fft2(kernel, shape=blurred_image.shape)
     blurred_image_frequency = fft2(blurred_image)
     de_blurred_image_frequency = np.divide(
@@ -89,3 +91,19 @@ def bicubic_kernel():
 
 def estimate_high_resolution_image(low_resolution_image, kernel):
     return convolve2d(low_resolution_image, kernel, mode='same')
+
+
+def total_variation_de_blurring(low_resolution_image, kernel, rho=1.0, calback=lambda _: False):
+    high_resolution_image_shape = np.array(low_resolution_image.shape) - np.array(kernel.shape)
+    gradient = gradient_doubly_block_circulant(high_resolution_image_shape)
+    kernel = kernel_to_doubly_block_circulant(kernel, high_resolution_image_shape)
+    f_step = de_degradation_f_step(low_resolution_image, kernel, gradient, p=rho)
+    high_resolution_image = np.reshape(alternating_direction_method_of_multipliers(
+        gradient,
+        f_step,
+        p=rho,
+        callback=calback,
+    ), high_resolution_image_shape)
+    assert high_resolution_image.shape == high_resolution_image_shape
+
+    return high_resolution_image

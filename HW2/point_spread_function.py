@@ -2,7 +2,6 @@ from itertools import islice
 
 import numpy as np
 from scipy.signal import convolve2d
-from scipy.fftpack import fft2, ifft2, fftshift, ifftshift
 from scipy.linalg import circulant
 
 
@@ -29,6 +28,25 @@ def box_point_spread_function(size, height, width):
     return kernel / np.sum(kernel)
 
 
+def horizontal_derivative_kernel():
+    return [[-1, 0, +1]]
+
+
+def vertical_derivative_kernel():
+    return [[-1], [0], [+1]]
+
+
+def gradient_doubly_block_circulant(image_shape):
+    horizontal_dbc = kernel_to_doubly_block_circulant(horizontal_derivative_kernel(), image_shape)
+    vertical_dbc = kernel_to_doubly_block_circulant(vertical_derivative_kernel(), image_shape)
+    dbc = np.hstack((
+        horizontal_dbc,
+        vertical_dbc
+    ))
+
+    return dbc
+
+
 def get_low_and_high_resolution_point_spread_function(
         point_spread_function,
         alpha,
@@ -49,7 +67,6 @@ def get_low_and_high_resolution_point_spread_function(
 
 def apply_point_spread_function_spatial(kernel, image):
     return convolve2d(image, kernel, mode='full')
-
 
 # def apply_point_spread_function_frequency(kernel, image, kernel_is_frequency=False):
 #     if kernel_is_frequency:
@@ -80,6 +97,7 @@ def apply_point_spread_function_spatial(kernel, image):
 #     return fftshift(k_fourier)
 
 
+# TODO: Sparsify it
 def kernel_to_doubly_block_circulant(kernel, second_shape):
     kernel = np.array(kernel)
     second_shape = np.array(second_shape)
@@ -103,6 +121,8 @@ def kernel_to_doubly_block_circulant(kernel, second_shape):
         np.prod(result_shape),
         np.prod(second_shape),
     ))
+
+
 
     for block_row in range(result_shape[0]):
         row_begin = block_row * result_shape[1]
