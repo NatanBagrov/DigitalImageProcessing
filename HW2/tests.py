@@ -1,8 +1,18 @@
-import numpy as np
-from scipy.signal import convolve2d
 from unittest import TestCase
 
-from point_spread_function import kernel_to_doubly_block_circulant, construct_blur_kernel_spatial
+import numpy as np
+from scipy.signal import convolve2d
+from skimage import data
+from skimage.transform import resize
+import matplotlib.pyplot as plt
+
+from point_spread_function import \
+    kernel_to_doubly_block_circulant, \
+    construct_blur_kernel_spatial, \
+    gaussian_point_spread_function
+from optimization import alternating_direction_method_of_multipliers, de_degradation_f_step
+from deblur import total_variation_de_blurring
+from visualization import plot_images_grid
 
 
 class PointSpreadFunctionTest(TestCase):
@@ -85,3 +95,31 @@ class PointSpreadFunctionTest(TestCase):
         input2 = np.array(input2)
 
         return convolve2d(input1, input2, mode='full', boundary='fill', fillvalue=0)
+
+
+class AlternatingDirectionMethodOfMultipliers(TestCase):
+    def test_cameraman_gaussian_h_15_sigma_10(self):
+        self.__class__.do(
+            self.__class__.load('camera'),
+            gaussian_point_spread_function(10, 15, 15)
+        )
+
+    @staticmethod
+    def load(name):
+        return resize(getattr(data, name).__call__() / 255.0, (128, 128))
+
+    @staticmethod
+    def do(image, kernel):
+        def callback(f):
+            plt.imshow(f.reshape(image.shape), cmap='gray')
+            plt.show()
+
+            return False
+
+        blurred_image = convolve2d(image, kernel, mode='full', boundary='fill', fillvalue=0)
+        rho = 1.0
+        restored_image = total_variation_de_blurring(blurred_image, kernel,
+                                                     calback=callback)
+        plot_images_grid([[image, blurred_image], [kernel, restored_image]])
+
+        return restored_image

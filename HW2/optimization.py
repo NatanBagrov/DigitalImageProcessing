@@ -1,4 +1,5 @@
 import numpy as np
+from tqdm import tqdm
 
 
 def conjugate_transpose(array):
@@ -25,6 +26,7 @@ def alternating_direction_method_of_multipliers(A, f_step, l=1.0, p=1.0, epsilon
     f = np.random.rand(A.shape[1])
     z = A @ f
     a = np.ones_like(z)
+    bar = tqdm()
 
     while change > epsilon:
         previous_f = f
@@ -32,6 +34,7 @@ def alternating_direction_method_of_multipliers(A, f_step, l=1.0, p=1.0, epsilon
         z = shrink(A @ f + a / p, l / p)
         a += p * (A @ f - z)
         change = np.linalg.norm(f - previous_f) / np.maximum(np.linalg.norm(previous_f), 1.0)
+        bar.update(1)
 
         if callback(f):
             break
@@ -50,11 +53,13 @@ def de_degradation_f_step(y, K, A, p=1.0,):
     """
 
     A_star = conjugate_transpose(A)
-    multiplier = np.linalg.inv(K @ conjugate_transpose(K) + p * A_star @ A)
+    K_star = conjugate_transpose(K)
+    multiplier = np.linalg.inv(K_star @ K + p * A_star @ A)
+    addendum = K_star @ y
 
     def f_step(a, z, rho):
         assert rho == p
-        f = multiplier @ (y - A_star @ (a - z))
+        f = multiplier @ (addendum - A_star @ (a - z))
 
         return f
 

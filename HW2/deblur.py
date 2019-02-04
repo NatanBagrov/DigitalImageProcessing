@@ -94,16 +94,16 @@ def estimate_high_resolution_image(low_resolution_image, kernel):
 
 
 def total_variation_de_blurring(low_resolution_image, kernel, rho=1.0, calback=lambda _: False):
-    high_resolution_image_shape = np.array(low_resolution_image.shape) - np.array(kernel.shape)
+    high_resolution_image_shape = np.array(low_resolution_image.shape) - np.array(kernel.shape) + 1
     gradient = gradient_doubly_block_circulant(high_resolution_image_shape)
     kernel = kernel_to_doubly_block_circulant(kernel, high_resolution_image_shape)
-    f_step = de_degradation_f_step(low_resolution_image, kernel, gradient, p=rho)
+    f_step = de_degradation_f_step(low_resolution_image.flatten(), kernel, gradient, p=rho)
     high_resolution_image = np.reshape(alternating_direction_method_of_multipliers(
         gradient,
         f_step,
         p=rho,
         callback=calback,
     ), high_resolution_image_shape)
-    assert high_resolution_image.shape == high_resolution_image_shape
+    assert all(high_resolution_image.shape == high_resolution_image_shape)
 
     return high_resolution_image

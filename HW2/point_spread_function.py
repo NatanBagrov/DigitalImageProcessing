@@ -39,7 +39,7 @@ def vertical_derivative_kernel():
 def gradient_doubly_block_circulant(image_shape):
     horizontal_dbc = kernel_to_doubly_block_circulant(horizontal_derivative_kernel(), image_shape)
     vertical_dbc = kernel_to_doubly_block_circulant(vertical_derivative_kernel(), image_shape)
-    dbc = np.hstack((
+    dbc = np.vstack((
         horizontal_dbc,
         vertical_dbc
     ))
