@@ -93,7 +93,27 @@ def estimate_high_resolution_image(low_resolution_image, kernel):
     return convolve2d(low_resolution_image, kernel, mode='same')
 
 
-def total_variation_de_blurring(low_resolution_image, kernel, rho=1.0, calback=lambda _: False):
+def total_variation_de_blurring(low_resolution_image, kernel, lambda_=1.0, rho=1.0, epsilon=1e-2, callback=lambda _: False):
+    def call_back_wrapper(image):
+        gradient_high_resolution_image = gradient @ image
+        gradient_horizontal_high_resolution_image = \
+            gradient_high_resolution_image[:gradient_high_resolution_image.size // 2]
+        gradient_vertical_high_resolution_image = \
+            gradient_high_resolution_image[gradient_high_resolution_image.size // 2:]
+        gradient_abs_high_resolution_image = \
+            np.sqrt(gradient_horizontal_high_resolution_image ** 2 + gradient_vertical_high_resolution_image ** 2)
+        low_resolution_image_estimate = kernel @ image
+        image = np.reshape(image, high_resolution_image_shape)
+        low_resolution_image_estimate = low_resolution_image_estimate.reshape(low_resolution_image.shape)
+        l2_loss = np.linalg.norm(low_resolution_image - low_resolution_image_estimate, ord=2)
+        print('||l-k*h||_2={}'.format(l2_loss))
+        tv_loss = np.linalg.norm(gradient_abs_high_resolution_image, ord=1)
+        print('||h||_TV={}'.format(tv_loss))
+        loss = l2_loss + lambda_ * tv_loss
+        print('||l-k*h||_2+lambda*||h||_TV={}'.format(loss))
+
+        return callback(image)
+
     high_resolution_image_shape = np.array(low_resolution_image.shape) - np.array(kernel.shape) + 1
     gradient = gradient_doubly_block_circulant(high_resolution_image_shape)
     kernel = kernel_to_doubly_block_circulant(kernel, high_resolution_image_shape)
@@ -101,8 +121,10 @@ def total_variation_de_blurring(low_resolution_image, kernel, rho=1.0, calback=l
     high_resolution_image = np.reshape(alternating_direction_method_of_multipliers(
         gradient,
         f_step,
+        l=lambda_,
         p=rho,
-        callback=calback,
+        epsilon=epsilon,
+        callback=call_back_wrapper,
     ), high_resolution_image_shape)
     assert all(high_resolution_image.shape == high_resolution_image_shape)
 

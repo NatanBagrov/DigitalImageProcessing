@@ -1,9 +1,11 @@
+import os
+
 import numpy as np
 from scipy.fftpack import fft2, fftshift, ifft2, ifftshift
 import matplotlib.pyplot as plt
 
 
-def plot_images_grid(images, title=None, titles=None, to_frequency=False, to_spatial=False):
+def plot_images_grid(images, title=None, titles=None, to_frequency=False, to_spatial=False, file_path_to_save=None):
     assert not to_frequency or not to_spatial
 
     rows = len(images)
@@ -29,8 +31,15 @@ def plot_images_grid(images, title=None, titles=None, to_frequency=False, to_spa
             ]
 
             axes[row][column].imshow(image, cmap='gray', extent=extent)
+
+            if titles:
+                axes[row][column].set_title(titles[row][column])
     if title:
         figure.suptitle(title)
+
+    if file_path_to_save is not None:
+        os.makedirs(os.path.dirname(file_path_to_save), exist_ok=True)
+        figure.savefig(file_path_to_save)
 
     plt.show()
 

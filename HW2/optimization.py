@@ -20,8 +20,6 @@ def alternating_direction_method_of_multipliers(A, f_step, l=1.0, p=1.0, epsilon
     :return:
     """
 
-    #
-
     change = np.inf
     f = np.random.rand(A.shape[1])
     z = A @ f
@@ -38,6 +36,8 @@ def alternating_direction_method_of_multipliers(A, f_step, l=1.0, p=1.0, epsilon
 
         if callback(f):
             break
+
+    bar.close()
 
     return f
 

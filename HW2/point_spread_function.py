@@ -3,6 +3,8 @@ from itertools import islice
 import numpy as np
 from scipy.signal import convolve2d
 from scipy.linalg import circulant
+from scipy import sparse
+from tqdm import tqdm
 
 
 def gaussian_point_spread_function(sigma, height, width):
@@ -33,13 +35,15 @@ def horizontal_derivative_kernel():
 
 
 def vertical_derivative_kernel():
-    return [[-1], [0], [+1]]
+    return [[-1],
+            [0],
+            [+1]]
 
 
 def gradient_doubly_block_circulant(image_shape):
     horizontal_dbc = kernel_to_doubly_block_circulant(horizontal_derivative_kernel(), image_shape)
     vertical_dbc = kernel_to_doubly_block_circulant(vertical_derivative_kernel(), image_shape)
-    dbc = np.vstack((
+    dbc = sparse.vstack((
         horizontal_dbc,
         vertical_dbc
     ))
@@ -98,7 +102,7 @@ def apply_point_spread_function_spatial(kernel, image):
 
 
 # TODO: Sparsify it
-def kernel_to_doubly_block_circulant(kernel, second_shape):
+def kernel_to_doubly_block_circulant(kernel, second_shape, dense=False):
     kernel = np.array(kernel)
     second_shape = np.array(second_shape)
     result_shape = np.array(second_shape) + np.array(kernel.shape) - 1
@@ -113,16 +117,23 @@ def kernel_to_doubly_block_circulant(kernel, second_shape):
     )
 
     # TODO: vectorize code below
-    blocks = list(islice(map(
+    blocks = map(
         lambda row: circulant(row)[:, :second_shape[1]],
         kernel
-    ), None, int(result_shape[0]), None))
-    doubly_block_circulant = np.zeros((
+    )
+
+    if not dense:
+        blocks = map(sparse.dok_matrix, blocks)
+
+    blocks = list(islice(blocks, None, int(result_shape[0]), None))
+    doubly_block_circulant = (np.zeros if dense else sparse.dok_matrix)((
         np.prod(result_shape),
         np.prod(second_shape),
     ))
-
-
+    status_bar = tqdm(
+        total=result_shape[0] * second_shape[0],
+        desc='Doubly block circulant matrix construction'
+    )
 
     for block_row in range(result_shape[0]):
         row_begin = block_row * result_shape[1]
@@ -133,7 +144,9 @@ def kernel_to_doubly_block_circulant(kernel, second_shape):
             column_end = column_begin + second_shape[1]
             doubly_block_circulant[row_begin:row_end, column_begin:column_end] =\
                 blocks[(block_row - block_column + result_shape[0]) % result_shape[0]]
+            status_bar.update(1)
 
+    status_bar.close()
     # # TODO: BY DEFINITION - VECTORIZE IT
     # for result_row in range(result_shape[0]):
     #     for result_column in range(result_shape[1]):
@@ -152,11 +165,18 @@ def kernel_to_doubly_block_circulant(kernel, second_shape):
     return doubly_block_circulant
 
 
-def construct_blur_kernel_spatial(psf_low, psf_high):
+def construct_blur_kernel_spatial(psf_low, psf_high, dense=False):
     blur_kernel_shape = np.array(psf_low.shape) - np.array(psf_high.shape) + 1
-    psf_high_doubly_block_circulant = kernel_to_doubly_block_circulant(psf_high, blur_kernel_shape)
+    psf_high_doubly_block_circulant = kernel_to_doubly_block_circulant(psf_high, blur_kernel_shape, dense=dense)
     # TODO: put analytical solution here
-    blur_kernel, residuals, rank, s = np.linalg.lstsq(psf_high_doubly_block_circulant, psf_low.flatten(), rcond=-1)
+    if dense:
+        blur_kernel, residuals, rank, s = np.linalg.lstsq(
+            psf_high_doubly_block_circulant,
+            psf_low.flatten(),
+            rcond=-1)
+    else:
+        blur_kernel, istop, itn, r1norm, r2norm, anorm, acond, arnorm, xnorm, var = \
+            sparse.linalg.lsqr(psf_high_doubly_block_circulant, psf_low.flatten())
 
     return blur_kernel.reshape(blur_kernel_shape)
 
