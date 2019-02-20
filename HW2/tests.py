@@ -7,15 +7,17 @@ from skimage import data
 from skimage.transform import resize
 from skimage.measure import compare_mse
 import matplotlib.pyplot as plt
+import cv2
 
 from point_spread_function import \
     kernel_to_doubly_block_circulant, \
     construct_blur_kernel_spatial, \
     gaussian_point_spread_function, \
     gradient_doubly_block_circulant
-from optimization import alternating_direction_method_of_multipliers, de_degradation_f_step
-from deblur import total_variation_de_blurring
+from optimization import alternating_direction_method_of_multipliers, de_degradation_f_step_multiplication
+from deblur import total_variation_de_blurring_spatial, total_variation_de_blurring_frequency, total_variation_de_blurring, d
 from visualization import plot_images_grid
+from deblur import d, dt
 
 
 class PointSpreadFunctionTest(TestCase):
@@ -82,9 +84,29 @@ class PointSpreadFunctionTest(TestCase):
 
         np.testing.assert_allclose(actual, desired, rtol=1e-5, atol=1e-5)
 
-    def test_gradient_doubly_block_circulant(self):
-        print(gradient_doubly_block_circulant((5, 5)).todense())
-        debug=42
+    def test_d(self):
+        h = 5
+        w = 4
+        u = np.random.rand(h, w)
+
+        dux_expected = np.hstack((np.diff(u, 1, 1), np.reshape(u[:, 0] - u[:, -1], (-1, 1))))
+        duy_expected = np.vstack((np.diff(u, 1, 0), np.reshape(u[0, :] - u[-1, :], (1, -1))))
+
+        dux_actual, duy_actual = d(u)
+
+        np.testing.assert_allclose(dux_actual, dux_expected)
+        np.testing.assert_allclose(duy_actual, duy_expected)
+
+        dtxy_expected = np.hstack((
+            np.reshape(dux_expected[:, -1] - dux_expected[:, 0], (-1, 1)),
+            -np.diff(dux_expected, 1, 1),
+        )) + np.vstack((
+            np.reshape(duy_expected[-1, :] - duy_expected[0, :], (1, -1)),
+            -np.diff(dux_expected, 1, 0),
+        ))
+        dtxy_actual = dt(dux_actual, duy_actual)
+
+        np.testing.assert_allclose(dtxy_actual, dtxy_expected)
 
     @staticmethod
     def my_convolve(input1, input2):
@@ -106,8 +128,10 @@ class PointSpreadFunctionTest(TestCase):
 
 class AlternatingDirectionMethodOfMultipliers(TestCase):
     def test_cameraman_gaussian_h_15_sigma_10(self):
-        image = self.__class__.load('camera')
-        kernel = gaussian_point_spread_function(10, 15, 15)
+        # image = self.__class__.load('camera')
+        image = cv2.imread('/Applications/MATLAB_R2018b.app/toolbox/images/imdata/cameraman.tif', 0) / 255.0
+        # kernel = gaussian_point_spread_function(10, 4, 4)
+        kernel = np.ones((15, 15)) / 15.0 / 15.0
 
         # scipy_result = self.__class__.do_scipy(image, kernel)
         # scipy_error = compare_mse(image, scipy_result)
@@ -119,28 +143,36 @@ class AlternatingDirectionMethodOfMultipliers(TestCase):
 
     @staticmethod
     def load(name):
-        return resize(getattr(data, name).__call__() / 255.0, (64, 64))
+        return resize(getattr(data, name).__call__() / 255.0, (256, 256), mode='wrap')
 
     @staticmethod
     def do_my(image, kernel, lambda_=1e-2):
         def callback(f):
-            print('ADM MSE={}'.format(compare_mse(image, f)))
+            dx, dy = d(f)
+            gradient = np.sqrt(np.square(dx) + np.square(dy))
+            print('L2: {}\t TV: {}\t ADM MSE={}'.format(
+                np.linalg.norm(blurred_image - convolve2d(f, kernel, mode='same', boundary='wrap'), ord=2),
+                np.linalg.norm(gradient, ord=1),
+                compare_mse(image, f)
+            ))
             plt.imshow(f.reshape(image.shape), cmap='gray')
             plt.title('ADM')
             plt.show()
 
             return False
 
-        blurred_image = convolve2d(image, kernel, mode='full', boundary='fill', fillvalue=0)
-        rho = 1.0
-        epsilon = 1e-3
+        blurred_image = convolve2d(image, kernel, mode='same', boundary='wrap')
+        rho = 1.0 / 5000.0
+        epsilon = 1e-9
         restored_image = total_variation_de_blurring(
             blurred_image,
             kernel,
-            lambda_=lambda_,
-            rho=rho,
-            epsilon=epsilon,
-            callback=callback)
+            5e4,
+            10,
+            1.618,
+            1e-3,
+            callback=callback,
+        )
         plot_images_grid([[image, blurred_image], [kernel, restored_image]])
 
         return restored_image
