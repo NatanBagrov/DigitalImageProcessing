@@ -248,7 +248,7 @@ def total_variation_de_blurring(f, h, mu, beta, gamma, epsilon, callback=lambda 
         x = np.real(ifft2(x))
         assert not np.any(np.isnan(x))
         assert not np.any(np.isinf(x))
-        import matplotlib.pyplot as plt; plt.imshow(x, cmap='gray'); plt.colorbar(); plt.show()
+        # import matplotlib.pyplot as plt; plt.imshow(x, cmap='gray'); plt.colorbar(); plt.show()
         change = np.linalg.norm(x - xp) / np.linalg.norm(x)
 
         d1, d2 = d(x)

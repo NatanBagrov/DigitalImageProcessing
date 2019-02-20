@@ -9,7 +9,7 @@ from deblur import \
     estimate_high_resolution_image, \
     bilinear_kernel, \
     bicubic_kernel, \
-    total_variation_de_blurring_spatial
+    total_variation_de_blurring
 from point_spread_function import \
     gaussian_point_spread_function, \
     box_point_spread_function, \
@@ -160,11 +160,13 @@ def main():
     if True:
         logger.debug('tv_estimate')
         name_to_tv_estimate = {
-            name: total_variation_de_blurring_spatial(
+            name: total_variation_de_blurring(
                 name_to_images[name][0],
                 k,
-                lambda_=1e-3,
-                epsilon=1e-4,
+                5e4,
+                10,
+                1.618,
+                1e-3,
             )
             for name, k in name_to_k.items()
         }
