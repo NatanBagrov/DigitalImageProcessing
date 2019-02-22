@@ -38,7 +38,7 @@ def range_invariant_compare_psnr(image_true, image_predicted):
 
 def main():
     image_file_path = 'DIPSourceHW2.png'
-    sigma = 4.0
+    sigma = 1.0
     size = 4
     alpha = 2.5
     stream_handler = logging.StreamHandler()
@@ -52,7 +52,7 @@ def main():
     image = cv2.imread(image_file_path, cv2.IMREAD_GRAYSCALE) / 255.0
     print(image.shape, image.dtype, image.max(), image.min())
     plot_images_grid([[image]], title='Continuous')
-    psf_high_height, psf_high_width = 32, 32
+    psf_high_height, psf_high_width = 60, 60
 
     name_to_function_and_args = {
         'gaussian kernel': (gaussian_point_spread_function, (sigma, psf_high_height, psf_high_width)),

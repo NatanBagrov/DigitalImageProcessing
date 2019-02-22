@@ -36,6 +36,25 @@ def estimate_fft_using_max(blurred_ffts):
     return max_fft
 
 
+def estimate_fft_using_soft_max(blurred_ffts):
+    abs_ffts = np.abs(blurred_ffts)
+    min_abs_fft = np.min(abs_ffts)
+    max_abs_fft = np.max(abs_ffts)
+    range_fft = max_abs_fft - min_abs_fft + 1e-7
+    abs_ffts_normalized = (abs_ffts - min_abs_fft) / range_fft
+    weight = np.exp(10* abs_ffts_normalized)
+    total_weight = np.sum(weight, axis=0)
+    restored_fft = np.sum(weight / total_weight * blurred_ffts, axis=0)
+    argmax = np.argmax(abs_ffts, axis=0)
+    assert np.all(argmax == np.argmax(weight, axis=0))
+    assert not np.any(np.isnan(weight))
+    assert not np.any(np.isinf(weight))
+    assert not np.any(np.isnan(total_weight))
+    assert not np.any(np.isinf(total_weight))
+
+    return restored_fft
+
+
 def estimate_fft_using_weighted_abs_p_generator(p):
     def f(blurred_ffts):
         abs_ffts = np.abs(blurred_ffts) ** p
