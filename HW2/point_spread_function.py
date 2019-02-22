@@ -6,6 +6,8 @@ from scipy.linalg import circulant
 from scipy import sparse
 from tqdm import tqdm
 
+from utils import conjugate_transpose
+
 
 def gaussian_point_spread_function(sigma, height, width):
     y = np.arange(-height // 2, (height + 1) // 2)
@@ -31,24 +33,11 @@ def box_point_spread_function(size, height, width):
 
 
 def horizontal_derivative_kernel():
-    return [[-1, 0, +1]]
+    return [[1, -1]]
 
 
 def vertical_derivative_kernel():
-    return [[-1],
-            [0],
-            [+1]]
-
-
-def gradient_doubly_block_circulant(image_shape):
-    horizontal_dbc = kernel_to_doubly_block_circulant(horizontal_derivative_kernel(), image_shape)
-    vertical_dbc = kernel_to_doubly_block_circulant(vertical_derivative_kernel(), image_shape)
-    dbc = sparse.vstack((
-        horizontal_dbc,
-        vertical_dbc
-    ))
-
-    return dbc
+    return [[1, ], [-1, ]]
 
 
 def get_low_and_high_resolution_point_spread_function(
@@ -70,38 +59,10 @@ def get_low_and_high_resolution_point_spread_function(
 
 
 def apply_point_spread_function_spatial(kernel, image):
+    # TODO: putting mode='full' here reduces artifact in Wiener
     return convolve2d(image, kernel, mode='same', boundary='wrap')
 
-# def apply_point_spread_function_frequency(kernel, image, kernel_is_frequency=False):
-#     if kernel_is_frequency:
-#         kernel_frequency = ifftshift(kernel)
-#     else:
-#         kernel_frequency = fft2(kernel, shape=image.shape)
-#
-#     image_frequency = fft2(image)
-#     blurred_image_frequency = kernel_frequency * image_frequency
-#     blurred_image = ifft2(blurred_image_frequency)
-#     # Why do I need fftshift here?
-#     blurred_image = fftshift(np.real(blurred_image))
-#
-#     return blurred_image
 
-
-# def construct_blur_kernel_frequency(psf_low, psf_high):
-#     psf_low_fourier = fft2(psf_low)
-#     psf_high_fourier = fft2(psf_high)
-#     k_fourier = np.divide(
-#         psf_low_fourier,
-#         psf_high_fourier,
-#         out=np.zeros_like(psf_low_fourier),
-#         where=np.logical_not(np.isclose(psf_high_fourier, 0.0))
-#     )
-#     np.testing.assert_allclose(k_fourier, ifftshift(fftshift(k_fourier)))
-#
-#     return fftshift(k_fourier)
-
-
-# TODO: Sparsify it
 def kernel_to_doubly_block_circulant(kernel, second_shape, dense=False):
     kernel = np.array(kernel)
     second_shape = np.array(second_shape)
@@ -147,56 +108,17 @@ def kernel_to_doubly_block_circulant(kernel, second_shape, dense=False):
             status_bar.update(1)
 
     status_bar.close()
-    # # TODO: BY DEFINITION - VECTORIZE IT
-    # for result_row in range(result_shape[0]):
-    #     for result_column in range(result_shape[1]):
-    #         row = result_row * result_shape[1] + result_column
-    #
-    #         for kernel_row in range(kernel.shape[0]):
-    #             for kernel_column in range(kernel.shape[1]):
-    #                 second_row = result_row - kernel_row
-    #                 second_column = result_column - kernel_column
-    #
-    #                 if np.all(0 <= np.array([second_row, second_column])) \
-    #                         and np.all(np.array([second_row, second_column]) < second_shape):
-    #                     column = second_row * second_shape[0] + second_column
-    #                     doubly_block_circulant[row][column] = kernel[kernel_row][kernel_column]
-
     return doubly_block_circulant
 
 
-def conjugate_transpose(a):
-    return np.conjugate(np.transpose(a))
-
-
-def construct_blur_kernel_spatial(psf_low, psf_high, dense=False):
+def construct_blur_kernel_spatial(psf_low, psf_high):
     blur_kernel_shape = np.array(psf_low.shape) - np.array(psf_high.shape) + 1
-    psf_high_doubly_block_circulant = kernel_to_doubly_block_circulant(psf_high, blur_kernel_shape, dense=dense)
-    # TODO: put analytical solution here
-    if dense:
-        if True:
-            blur_kernel = \
-                np.linalg.inv(
-                    conjugate_transpose(psf_high_doubly_block_circulant)
-                    @ psf_high_doubly_block_circulant) \
-                @ conjugate_transpose(psf_high_doubly_block_circulant)\
-                @ psf_low.flatten()
-        else:
-            blur_kernel, residuals, rank, s = np.linalg.lstsq(
-                psf_high_doubly_block_circulant,
-                psf_low.flatten(),
-                rcond=-1)
-    else:
-        blur_kernel, istop, itn, r1norm, r2norm, anorm, acond, arnorm, xnorm, var = \
-            sparse.linalg.lsqr(psf_high_doubly_block_circulant, psf_low.flatten())
+    psf_high_doubly_block_circulant = kernel_to_doubly_block_circulant(psf_high, blur_kernel_shape, dense=True)
+    blur_kernel = \
+        np.linalg.inv(
+            conjugate_transpose(psf_high_doubly_block_circulant)
+            @ psf_high_doubly_block_circulant) \
+        @ conjugate_transpose(psf_high_doubly_block_circulant) \
+        @ psf_low.flatten()
 
     return blur_kernel.reshape(blur_kernel_shape)
-
-
-# def construct_blur_kernel_spatial(psf_low, psf_high):
-#     k_fourier = construct_blur_kernel_frequency(psf_low, psf_high)
-#     k = ifft2(k_fourier)
-#     k = fftshift(k)
-#     k = np.real(k)
-#
-#     return k

@@ -5,9 +5,9 @@ from scipy.fftpack import fft2, ifft2
 from scipy.signal import correlate2d
 from tqdm import tqdm
 
+from utils import conjugate_transpose
 
-def conjugate_transpose(array):
-    return np.transpose(np.conjugate(array))
+# TODO: DEBUG THIS MODULE! CURRENTLY NOT IN USE
 
 
 def alternating_direction_method_of_multipliers(A, f, f_step, l=1.0, p=1.0, epsilon=1e-2, callback=lambda _: False):

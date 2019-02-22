@@ -11,11 +11,9 @@ import cv2
 
 from point_spread_function import \
     kernel_to_doubly_block_circulant, \
-    construct_blur_kernel_spatial, \
-    gaussian_point_spread_function, \
-    gradient_doubly_block_circulant
-from optimization import alternating_direction_method_of_multipliers, de_degradation_f_step_multiplication
-from deblur import total_variation_de_blurring_spatial, total_variation_de_blurring_frequency, total_variation_de_blurring, d
+    construct_blur_kernel_spatial
+
+from deblur import total_variation_de_blurring
 from visualization import plot_images_grid
 from deblur import d, dt
 
@@ -83,30 +81,6 @@ class PointSpreadFunctionTest(TestCase):
         actual = construct_blur_kernel_spatial(psf_l, psf_h)
 
         np.testing.assert_allclose(actual, desired, rtol=1e-5, atol=1e-5)
-
-    def test_d(self):
-        h = 5
-        w = 4
-        u = np.random.rand(h, w)
-
-        dux_expected = np.hstack((np.diff(u, 1, 1), np.reshape(u[:, 0] - u[:, -1], (-1, 1))))
-        duy_expected = np.vstack((np.diff(u, 1, 0), np.reshape(u[0, :] - u[-1, :], (1, -1))))
-
-        dux_actual, duy_actual = d(u)
-
-        np.testing.assert_allclose(dux_actual, dux_expected)
-        np.testing.assert_allclose(duy_actual, duy_expected)
-
-        dtxy_expected = np.hstack((
-            np.reshape(dux_expected[:, -1] - dux_expected[:, 0], (-1, 1)),
-            -np.diff(dux_expected, 1, 1),
-        )) + np.vstack((
-            np.reshape(duy_expected[-1, :] - duy_expected[0, :], (1, -1)),
-            -np.diff(dux_expected, 1, 0),
-        ))
-        dtxy_actual = dt(dux_actual, duy_actual)
-
-        np.testing.assert_allclose(dtxy_actual, dtxy_expected)
 
     @staticmethod
     def my_convolve(input1, input2):

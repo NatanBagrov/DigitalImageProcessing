@@ -2,7 +2,6 @@ import logging
 
 import numpy as np
 import cv2
-from scipy.fftpack import fftshift
 from skimage.measure import compare_psnr
 
 from deblur import \
@@ -114,7 +113,7 @@ def main():
     # 4
     logger.debug('ks')
     name_to_k = {
-        name: construct_blur_kernel_spatial(*point_spread_functions, dense=True)
+        name: construct_blur_kernel_spatial(*point_spread_functions)
         for name, point_spread_functions in name_to_psfs.items()
     }
 
