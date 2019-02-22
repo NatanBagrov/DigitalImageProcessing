@@ -70,7 +70,7 @@ def get_low_and_high_resolution_point_spread_function(
 
 
 def apply_point_spread_function_spatial(kernel, image):
-    return convolve2d(image, kernel, mode='full')
+    return convolve2d(image, kernel, mode='same', boundary='wrap')
 
 # def apply_point_spread_function_frequency(kernel, image, kernel_is_frequency=False):
 #     if kernel_is_frequency:
@@ -165,15 +165,27 @@ def kernel_to_doubly_block_circulant(kernel, second_shape, dense=False):
     return doubly_block_circulant
 
 
+def conjugate_transpose(a):
+    return np.conjugate(np.transpose(a))
+
+
 def construct_blur_kernel_spatial(psf_low, psf_high, dense=False):
     blur_kernel_shape = np.array(psf_low.shape) - np.array(psf_high.shape) + 1
     psf_high_doubly_block_circulant = kernel_to_doubly_block_circulant(psf_high, blur_kernel_shape, dense=dense)
     # TODO: put analytical solution here
     if dense:
-        blur_kernel, residuals, rank, s = np.linalg.lstsq(
-            psf_high_doubly_block_circulant,
-            psf_low.flatten(),
-            rcond=-1)
+        if True:
+            blur_kernel = \
+                np.linalg.inv(
+                    conjugate_transpose(psf_high_doubly_block_circulant)
+                    @ psf_high_doubly_block_circulant) \
+                @ conjugate_transpose(psf_high_doubly_block_circulant)\
+                @ psf_low.flatten()
+        else:
+            blur_kernel, residuals, rank, s = np.linalg.lstsq(
+                psf_high_doubly_block_circulant,
+                psf_low.flatten(),
+                rcond=-1)
     else:
         blur_kernel, istop, itn, r1norm, r2norm, anorm, acond, arnorm, xnorm, var = \
             sparse.linalg.lsqr(psf_high_doubly_block_circulant, psf_low.flatten())

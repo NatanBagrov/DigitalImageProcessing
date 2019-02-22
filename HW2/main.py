@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import cv2
 from scipy.fftpack import fftshift
+from skimage.measure import compare_psnr
 
 from deblur import \
     inverse_filter_1, \
@@ -17,6 +18,23 @@ from point_spread_function import \
     apply_point_spread_function_spatial, \
     construct_blur_kernel_spatial
 from visualization import plot_images_grid
+
+
+def range_invariant_compare_psnr(image_true, image_predicted):
+    min_true = np.min(image_true)
+    max_true = np.max(image_true)
+    min_predicted = np.min(image_predicted)
+    max_predicted = np.max(image_predicted)
+
+    assert min_predicted < max_predicted
+
+    image_predicted = \
+        (image_predicted - min_predicted) \
+        * (max_true - min_true) \
+        / (max_predicted - min_predicted) \
+        + min_true
+
+    return compare_psnr(image_true, image_predicted)
 
 
 def main():
@@ -84,11 +102,11 @@ def main():
     }
 
     plot_images_grid(
-        list(name_to_psfs.values()),
+        list(name_to_images.values()),
         title='images',
         titles=[
             ['{} low'.format(name), '{} high'.format(name)]
-            for name in name_to_psfs.keys()
+            for name in name_to_images.keys()
         ],
         file_path_to_save='deliverable/images.png',
     )
@@ -126,19 +144,6 @@ def main():
 
     plot_images_grid([list(name_to_estimated_psf_low.values())], title='spatial estimated low images from high')
 
-    # TODO: Stuff below is for debug and it does not work
-    # name_to_estimated_psf_low = {
-    #     name: fftshift(apply_point_spread_function_frequency(k, name_to_psfs[name][1], kernel_is_frequency=True))
-    #     for name, k in name_to_k_frequency.items()
-    # }
-    # plot_images_grid([list(name_to_estimated_psf_low.values())], title='spatial estimated PSF_L')
-    #
-    # name_to_estimated_image_low = {
-    #     name: fftshift(apply_point_spread_function_frequency(k, name_to_images[name][1], kernel_is_frequency=True))
-    #     for name, k in name_to_k_frequency.items()
-    # }
-    # plot_images_grid([list(name_to_estimated_image_low.values())], title='estimated images')
-
     # 5
     # i
     logger.debug('inverse_filter_estimation')
@@ -146,39 +151,48 @@ def main():
         name: inverse_filter_1(name_to_images[name][0], k)
         for name, k in name_to_k.items()
     }
+    name_to_inverse_filter_psnr = {
+        name: range_invariant_compare_psnr(name_to_images[name][1], estimation)
+        for name, estimation in name_to_inverse_filter_estimation.items()
+    }
+
     plot_images_grid(
         [list(name_to_inverse_filter_estimation.values())],
         title='Wiener',
         titles=[[
-            name
+            '{}\nPSNR:{:.2f}'.format(name, name_to_inverse_filter_psnr[name])
             for name in name_to_k.keys()
         ]],
         file_path_to_save='deliverable/wiener.png',
     )
 
     # ii
-    if True:
-        logger.debug('tv_estimate')
-        name_to_tv_estimate = {
-            name: total_variation_de_blurring(
-                name_to_images[name][0],
-                k,
-                5e4,
-                10,
-                1.618,
-                1e-3,
-            )
-            for name, k in name_to_k.items()
-        }
-        plot_images_grid(
-            [list(name_to_tv_estimate.values())],
-            title='TV',
-            titles=[[
-                name
-                for name in name_to_k.keys()
-            ]],
-            file_path_to_save='deliverable/tv.png',
+    logger.debug('tv_estimate')
+    name_to_tv_estimate = {
+        name: total_variation_de_blurring(
+            name_to_images[name][0],
+            k,
+            5e4,
+            10,
+            1.618,
+            1e-3,
         )
+        for name, k in name_to_k.items()
+    }
+    name_to_tv_psnr = {
+        name: range_invariant_compare_psnr(name_to_images[name][1], estimation)
+        for name, estimation in name_to_tv_estimate.items()
+    }
+
+    plot_images_grid(
+        [list(name_to_tv_estimate.values())],
+        title='TV',
+        titles=[[
+            '{}\nPSNR:{:.2f}'.format(name, name_to_tv_psnr[name])
+            for name in name_to_k.keys()
+        ]],
+        file_path_to_save='deliverable/tv.png',
+    )
 
     # 6
     plot_images_grid([[bicubic_kernel(), bilinear_kernel()]], title='kernels')
@@ -193,18 +207,67 @@ def main():
             (bicubic_kernel, 'bicubic'),
         )
     }
+    method_to_name_to_psnr = {
+        method: {
+            name: range_invariant_compare_psnr(name_to_images[name][1], estimation)
+            for name, estimation in name_to_image.items()
+        }
+        for method, name_to_image in method_to_name_to_image.items()
+    }
 
     plot_images_grid(
         list(map(list, map(dict.values, method_to_name_to_image.values()))),
         title='h',
         titles=[
             [
-                '{} -> {}'.format(psf_kernel, method)
+                '{} -> {}\nPSNR:{:.2f}'.format(psf_kernel, method, method_to_name_to_psnr[method][psf_kernel])
                 for psf_kernel in name_to_images.keys()
             ]
             for method, name_to_images in method_to_name_to_image.items()
         ],
         file_path_to_save='deliverable/interpolation.png'
+    )
+
+    plot_images_grid(
+        [
+            [
+                name_to_images[psf_kernel][0],
+                name_to_inverse_filter_estimation[psf_kernel],
+                name_to_tv_estimate[psf_kernel],
+            ]
+            +
+            [
+                name_to_estimate[psf_kernel]
+                for method, name_to_estimate in method_to_name_to_image.items()
+            ]
+            +
+            [
+                name_to_images[psf_kernel][1],
+            ]
+            for psf_kernel in name_to_function_and_args.keys()
+        ],
+        titles=[
+            [
+                'PSNR:{:.2f}'.format(range_invariant_compare_psnr(name_to_images[psf_kernel][1], name_to_images[psf_kernel][0])),
+                'PSNR:{:.2f}'.format(name_to_inverse_filter_psnr[psf_kernel]),
+                'PSNR:{:.2f}'.format(name_to_tv_psnr[psf_kernel]),
+            ]
+            +
+            [
+                'PSNR:{:.2f}'.format(name_to_psnr[psf_kernel])
+                for method, name_to_psnr in method_to_name_to_psnr.items()
+
+            ]
+            +
+            [
+                'PSNR:{:.2f}'.format(range_invariant_compare_psnr(name_to_images[psf_kernel][1], name_to_images[psf_kernel][1])),
+            ]
+            for psf_kernel in name_to_function_and_args.keys()
+        ],
+        row_headers=list(name_to_function_and_args.keys()),
+        column_headers=(['low', 'Wiener', 'TV', ] + list(method_to_name_to_image.keys()) + ['high']),
+        disable_ticks=True,
+        file_path_to_save='deliverable/all.png'
     )
 
     debug = 42
