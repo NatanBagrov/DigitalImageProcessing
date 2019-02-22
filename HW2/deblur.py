@@ -10,7 +10,7 @@ def inverse_filter_1(blurred_image, kernel, desired_shape=None):
     if desired_shape is None:
         desired_shape = blurred_image.shape
 
-    # TODO: can I apply Wienner filter in frequency domain
+    # TODO: can I apply Wiener filter in frequency domain
     kernel_frequency = fft2(kernel, shape=desired_shape)
     blurred_image_frequency = fft2(blurred_image, shape=desired_shape)
     de_blurred_image_frequency = np.divide(
@@ -19,7 +19,17 @@ def inverse_filter_1(blurred_image, kernel, desired_shape=None):
         out=np.zeros_like(kernel_frequency),
         where=np.logical_not(np.isclose(kernel_frequency, 0.0)),
     )
-    de_blurred_image = ifft2(de_blurred_image_frequency, shape=desired_shape).real
+    de_blurred_image = np.real(ifft2(de_blurred_image_frequency, shape=desired_shape))
+    # TODO: I will be happy to know exactly is how and why it works (for mode=same)
+    kernel_height, kernel_width = kernel.shape
+    top_left     = de_blurred_image[:-kernel_height // 2, :-kernel_width // 2]
+    bottom_left  = de_blurred_image[-kernel_height // 2:, :-kernel_width // 2]
+    top_right    = de_blurred_image[:-kernel_height // 2, -kernel_width // 2:]
+    bottom_right = de_blurred_image[-kernel_height // 2:, -kernel_width // 2:]
+    de_blurred_image = np.block([
+        [bottom_right, bottom_left],
+        [top_right, top_left],
+    ])
 
     # filter_spatial = kernel_to_doubly_block_circulant(kernel, blurred_image.shape)
     # de_blurred_image = estimate_high_resolution_image(blurred_image, filter_spatial)
