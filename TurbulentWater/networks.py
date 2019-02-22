@@ -226,7 +226,7 @@ class vgg_features(nn.Module):
     def __init__(self):
         super(vgg_features, self).__init__()
         # get vgg16 features up to conv 4_3
-        self.model = nn.Sequential(*list(vgg16(pretrained=True).features)[:23])
+        self.features = nn.Sequential(*list(vgg16(pretrained=True).features)[:23])
         # will not need to compute gradients
         for param in self.parameters():
             param.requires_grad=False
@@ -235,7 +235,7 @@ class vgg_features(nn.Module):
         # change normaliztion form [-1,1] to VGG normalization
         if renormalize:
             x = ((x*.5+.5)-float_tensor([0.485, 0.456, 0.406]).view(1,3,1,1))/float_tensor([0.229, 0.224, 0.225]).view(1,3,1,1)
-        return self.model(x)
+        return self.features(x)
 
 
 class Discriminator(nn.Module):

@@ -122,7 +122,10 @@ def main():
     if args.test and not args.load:
         args.load = args.exp_name
     if args.load:
-        model.load_state_dict(torch.load(os.path.join(args.outroot, '%s_net.pth' % args.load)), strict=args.test)
+        model.load_state_dict(torch.load(
+            os.path.join(args.outroot, '%s_net.pth' % args.load),
+            map_location=map_location(),
+        ), strict=args.test)
 
     # create outroot if necessary
     if not os.path.exists(args.outroot):
@@ -212,6 +215,12 @@ def cuda_if_available(x):
 
     return x
 
+
+def map_location():
+    if torch.cuda.is_available():
+        return None
+
+    return 'cpu'
 
 if __name__ == '__main__':
     print(f'Using PyTorch version {torch.__version__}')
