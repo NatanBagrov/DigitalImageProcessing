@@ -2,13 +2,15 @@ import argparse
 import os
 import time
 import torch
+
 import torchvision
-from datasets import ImageFolder, PairedImageFolder
 import torchvision.transforms as transforms
-import pairedtransforms
-import networks
 from PIL import Image
+
 import synthdata
+import networks
+import pairedtransforms
+from datasets import ImageFolder, PairedImageFolder
 from globals import ROOT_PATH
 import Interp
 
@@ -188,7 +190,16 @@ def visualize(input, target, model, name):
         torchvision.utils.save_image(visuals, name, nrow=16, normalize=True, range=(-1, 1), pad_value=1)
 
 
-def test(loader, model, args):
+def test(loader, model, args, metric_name_to_function=None, save=True):
+    if metric_name_to_function is None:
+        metric_name_to_function = dict()
+
+    count = 0
+    metric_name_to_value_sum = {
+        metric_name: 0.0
+        for metric_name in metric_name_to_function.keys()
+    }
+
     model.eval()
     with torch.no_grad():
         end_time = time.time()
@@ -200,16 +211,31 @@ def test(loader, model, args):
             # X, Y = np.mgrid[0:warp.size()[2], 0:warp.size()[3]]
             # plt.quiver(X[::16, ::16], Y[::16, ::16], warp.detach().numpy().transpose((0, 2, 3, 1))[0, ::16, ::16, 0], warp.detach().numpy().transpose((0, 2, 3, 1))[0, ::16, ::16, 1], edgecolor='k', facecolor='None', linewidth=.1)
 
-            # save the output for each image by name
-            for out, name in zip(z, data[-1]):
-                if not os.path.exists(os.path.join(args.outroot, '%s_test' % args.exp_name, os.path.dirname(name))):
-                    os.makedirs(os.path.join(args.outroot, '%s_test' % args.exp_name, os.path.dirname(name)))
+            if save:
+                # save the output for each image by name
+                for out, name in zip(z, data[-1]):
+                    if not os.path.exists(os.path.join(args.outroot, '%s_test' % args.exp_name, os.path.dirname(name))):
+                        os.makedirs(os.path.join(args.outroot, '%s_test' % args.exp_name, os.path.dirname(name)))
 
-                im = Image.fromarray((out * .5 + .5).mul(255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy())
-                im.save(os.path.join(args.outroot, '%s_test' % args.exp_name, name))
+                    im = Image.fromarray((out * .5 + .5).mul(255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy())
+                    im.save(os.path.join(args.outroot, '%s_test' % args.exp_name, name))
+
+            for (image_true, image_predicted) in zip(data[1], z):
+                count += 1
+
+                for metric_name, metric_function in metric_name_to_function.items():
+                    metric_value = metric_function(image_true, image_predicted)
+                    metric_name_to_value_sum[metric_name] += metric_value
 
             batch_time = time.time() - end_time
-            print('%s Test: %04d/%04d time: %.3f %.3f ' % (args.exp_name, i, len(loader), data_time, batch_time))
+            print('%s Test: %04d/%04d time: %.3f %.3f %s' % (
+                args.exp_name,
+                i, len(loader),
+                data_time, batch_time,
+                ' '.join(map(
+                    lambda name_value: 'average {}:{:.3f}'.format(name_value[0], name_value[1] / count),
+                    metric_name_to_value_sum.items()))
+            ))
             end_time = time.time()
 
             # if i==10:
