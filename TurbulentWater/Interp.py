@@ -60,6 +60,7 @@ def interp2(f,i,j):
 	f   = f0*(1-di) + f1*di
 	return f.transpose(2,3).transpose(1,2).contiguous()
 
+
 def warp(im,di,dj):
 	# f is the image to be interpolated with size [num_batch, channels, height, width]
 	# di,dj are grids of index offsets into f with size [num_batch, height, width]
@@ -70,3 +71,33 @@ def warp(im,di,dj):
 		i,j=i.cuda(), j.cuda()
 	return interp2(im, i+di, j+dj)
 
+
+def inverse_warp(im, di, dj):
+	"""
+	Get observation from original/predicted image
+
+	:param im: [num_batch, channels, height, width]
+	:param di: [num_batch, height, width]
+	:param dj: [num_batch, height, width]
+	:return: [num_batch, channels, height, width]
+	"""
+
+	num_batch, channels, height, width = im.shape
+	i, j = np.meshgrid(
+		np.arange(height),
+		np.arange(width),
+		indexing='ij')
+	i = torch.from_numpy(i).unsqueeze(0).expand_as(im[:, 0, :, :])
+	j = torch.from_numpy(j).unsqueeze(0).expand_as(im[:, 0, :, :])
+
+	if im.is_cuda:
+		i = i.cuda()
+		j = j.cuda()
+
+	ii = (i.float() + di).round().clamp(0, height - 1).long()
+	jj = (j.float() + dj).round().clamp(0, width - 1).long()
+
+	jm = torch.zeros_like(im)
+	jm[:, :, ii, jj] = im[:, :, i, j]
+
+	return jm

@@ -14,7 +14,15 @@ class Model(nn.Module):
         super(Model, self).__init__()
 
         # weights of losses
-        self.weights = {'X_L1':args.weight_X_L1, 'Y_L1':args.weight_Y_L1, 'Z_L1':args.weight_Z_L1, 'Y_VGG':args.weight_Y_VGG, 'Z_VGG':args.weight_Z_VGG, 'Z_Adv':args.weight_Z_Adv}
+        self.weights = {
+            'X_L1':args.weight_X_L1,
+            'Y_L1':args.weight_Y_L1,
+            'Z_L1':args.weight_Z_L1,
+            'Y_VGG':args.weight_Y_VGG,
+            'Z_VGG':args.weight_Z_VGG,
+            'Z_Adv':args.weight_Z_Adv,
+            'Z_invertability': args.weight_Z_invertability,
+        }
 
         # networks
         params_G = []
@@ -88,7 +96,7 @@ class Model(nn.Module):
         return x, warp, y, z
 
 
-    def compute_loss_G(self, x, y, z, target):
+    def compute_loss_G(self, x, y, z, target, input, warp):
         losses = OrderedDict()
 
         # Reconstruction loss
@@ -109,6 +117,13 @@ class Model(nn.Module):
         if self.weights['Z_Adv']>0:
             losses['Z_Adv'] = self.discriminator.calc_gen_loss(z)
 
+        # Invertability loss
+        if self.weights['Z_invertability']:
+            losses['Z_invertability'] = self.recon_criterion(
+                # TODO: add to model output
+                Interp.inverse_warp(z, warp[:, 0, :, :], warp[:, 1, :, :]),
+                input)
+
         return losses
 
 
@@ -123,7 +138,7 @@ class Model(nn.Module):
         
         # update generators
         self.optimizer_G.zero_grad()
-        losses  = self.compute_loss_G(x, y, z, target)
+        losses  = self.compute_loss_G(x, y, z, target, input, warp)
         loss = sum([losses[key]*self.weights[key] for key in losses.keys()])
         loss.backward()
         self.optimizer_G.step()

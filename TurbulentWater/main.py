@@ -10,6 +10,7 @@ import networks
 from PIL import Image
 import synthdata
 from globals import ROOT_PATH
+import Interp
 
 
 def main():
@@ -51,6 +52,7 @@ def main():
                         help='weight of L1 reconstruction loss after color net')
     parser.add_argument('--weight-Z-VGG', default=.5, type=float, help='weight of perceptual loss after color net')
     parser.add_argument('--weight-Z-Adv', default=0.2, type=float, help='weight of adversarial loss after color net')
+    parser.add_argument('--weight-Z-invertability', default=0.0, type=float, help='weight of adversarial loss after color net')
     args = parser.parse_args()
 
     # set random seed for consistent fixed batch
@@ -178,9 +180,11 @@ def visualize(input, target, model, name):
     model.eval()
     with torch.no_grad():
         x, warp, y, z = model(input)
+        # TODO: add to model output
+        x_ = Interp.inverse_warp(z, warp[:, 0, :, :], warp[:, 1, :, :])
         warp = (warp + 5) / 10
         warp = torch.cat((warp, torch.ones_like(y[:, :1, :, :])), dim=1)
-        visuals = torch.cat([input.cpu(), x.cpu(), warp.cpu(), y.cpu(), z.cpu(), target.cpu()], dim=2)
+        visuals = torch.cat([input.cpu(), x.cpu(), warp.cpu(), y.cpu(), z.cpu(), target.cpu(), x_.cpu()], dim=2)
         torchvision.utils.save_image(visuals, name, nrow=16, normalize=True, range=(-1, 1), pad_value=1)
 
 
@@ -192,6 +196,9 @@ def test(loader, model, args):
             input = cuda_if_available(data[0])
             data_time = time.time() - end_time
             x, warp, y, z = model(input, cc=False)
+            # To visualize field
+            # X, Y = np.mgrid[0:warp.size()[2], 0:warp.size()[3]]
+            # plt.quiver(X[::16, ::16], Y[::16, ::16], warp.detach().numpy().transpose((0, 2, 3, 1))[0, ::16, ::16, 0], warp.detach().numpy().transpose((0, 2, 3, 1))[0, ::16, ::16, 1], edgecolor='k', facecolor='None', linewidth=.1)
 
             # save the output for each image by name
             for out, name in zip(z, data[-1]):
@@ -222,6 +229,7 @@ def map_location():
 
     return 'cpu'
 
+
 if __name__ == '__main__':
-    print(f'Using PyTorch version {torch.__version__}')
+    print(f'Using PyTorch version {torch.__version__} on {"gpu" if torch.cuda.is_available() else "cpu"}')
     main()
