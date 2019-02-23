@@ -1,17 +1,19 @@
 import argparse
 import os
 import time
-import torch
 
+import numpy as np
+import torch
 import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
+from skimage.measure import compare_psnr, compare_ssim, compare_mse
 
 import synthdata
 import networks
 import pairedtransforms
 from datasets import ImageFolder, PairedImageFolder
-from globals import ROOT_PATH
+from globals import ROOT_PATH, cuda_if_available, map_location
 import Interp
 
 
@@ -54,7 +56,8 @@ def main():
                         help='weight of L1 reconstruction loss after color net')
     parser.add_argument('--weight-Z-VGG', default=.5, type=float, help='weight of perceptual loss after color net')
     parser.add_argument('--weight-Z-Adv', default=0.2, type=float, help='weight of adversarial loss after color net')
-    parser.add_argument('--weight-Z-invertability', default=0.0, type=float, help='weight of adversarial loss after color net')
+    parser.add_argument('--weight-Z-invertability', default=0.0, type=float, help='weight of invertability loss')
+    parser.add_argument('--weight-diff', default=0.0, type=float, help='weight of differentiability loss')
     args = parser.parse_args()
 
     # set random seed for consistent fixed batch
@@ -115,6 +118,12 @@ def main():
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, num_workers=args.workers,
                                               pin_memory=True, shuffle=False)
 
+    metric_name_to_function = {
+        'mse': compare_mse,
+        'psnr': compare_psnr,
+        'ssim': lambda x, y: compare_ssim(x, y, multichannel=True),
+    }
+
     # fixed test batch for visualization during training
     fixed_batch = iter(val_loader).next()[0]
 
@@ -137,6 +146,7 @@ def main():
 
     # if args.test only run test script
     if args.test:
+        evaluate(val_loader, model, args, metric_name_to_function)
         test(test_loader, model, args)
         return
 
@@ -144,6 +154,7 @@ def main():
     for epoch in range(args.epochs):
         train(train_loader, model, fixed_batch, epoch, args)
         torch.save(model.state_dict(), os.path.join(args.outroot, '%s_net.pth' % args.exp_name))
+        evaluate(val_loader, model, args, metric_name_to_function)
         test(test_loader, model, args)
 
 
@@ -190,16 +201,7 @@ def visualize(input, target, model, name):
         torchvision.utils.save_image(visuals, name, nrow=16, normalize=True, range=(-1, 1), pad_value=1)
 
 
-def test(loader, model, args, metric_name_to_function=None, save=True):
-    if metric_name_to_function is None:
-        metric_name_to_function = dict()
-
-    count = 0
-    metric_name_to_value_sum = {
-        metric_name: 0.0
-        for metric_name in metric_name_to_function.keys()
-    }
-
+def test(loader, model, args):
     model.eval()
     with torch.no_grad():
         end_time = time.time()
@@ -211,35 +213,68 @@ def test(loader, model, args, metric_name_to_function=None, save=True):
             # X, Y = np.mgrid[0:warp.size()[2], 0:warp.size()[3]]
             # plt.quiver(X[::16, ::16], Y[::16, ::16], warp.detach().numpy().transpose((0, 2, 3, 1))[0, ::16, ::16, 0], warp.detach().numpy().transpose((0, 2, 3, 1))[0, ::16, ::16, 1], edgecolor='k', facecolor='None', linewidth=.1)
 
-            if save:
-                # save the output for each image by name
-                for out, name in zip(z, data[-1]):
-                    if not os.path.exists(os.path.join(args.outroot, '%s_test' % args.exp_name, os.path.dirname(name))):
-                        os.makedirs(os.path.join(args.outroot, '%s_test' % args.exp_name, os.path.dirname(name)))
+            # save the output for each image by name
+            for out, name in zip(z, data[-1]):
+                if not os.path.exists(os.path.join(args.outroot, '%s_test' % args.exp_name, os.path.dirname(name))):
+                    os.makedirs(os.path.join(args.outroot, '%s_test' % args.exp_name, os.path.dirname(name)))
 
-                    im = Image.fromarray((out * .5 + .5).mul(255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy())
-                    im.save(os.path.join(args.outroot, '%s_test' % args.exp_name, name))
-
-            for (image_true, image_predicted) in zip(data[1], z):
-                count += 1
-
-                for metric_name, metric_function in metric_name_to_function.items():
-                    metric_value = metric_function(image_true, image_predicted)
-                    metric_name_to_value_sum[metric_name] += metric_value
+                im = Image.fromarray((out * .5 + .5).mul(255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy())
+                im.save(os.path.join(args.outroot, '%s_test' % args.exp_name, name))
 
             batch_time = time.time() - end_time
-            print('%s Test: %04d/%04d time: %.3f %.3f %s' % (
+            print('%s Test: %04d/%04d time: %.3f %.3f' % (
                 args.exp_name,
                 i, len(loader),
                 data_time, batch_time,
-                ' '.join(map(
-                    lambda name_value: 'average {}:{:.3f}'.format(name_value[0], name_value[1] / count),
-                    metric_name_to_value_sum.items()))
             ))
             end_time = time.time()
 
             # if i==10:
             #    break
+
+
+def evaluate(loader, model, args, metric_name_to_function):
+    metric_name_to_values = {
+        metric_name: list()
+        for metric_name in metric_name_to_function.keys()
+    }
+    paths = list()
+    model.eval()
+    with torch.no_grad():
+        end_time = time.time()
+
+        for i, ((input, target), names) in enumerate(loader):
+            input = cuda_if_available(input)
+            data_time = time.time() - end_time
+            x, warp, y, z = model(input, cc=False)
+
+            for image_true, image_predicted, name in zip(target, z, names):
+                paths.append(name)
+                image_true = image_true.cpu().numpy().transpose((1, 2, 0))
+                image_predicted = image_predicted.cpu().numpy().transpose((1, 2, 0))
+
+                for metric_name, metric_function in metric_name_to_function.items():
+                    metric_name_to_values[metric_name].append(metric_function(
+                        image_true,
+                        image_predicted,
+                    ))
+
+            batch_time = time.time() - end_time
+            print('%s Evaluation: %04d/%04d time: %.3f %.3f %s' % (
+                args.exp_name,
+                i, len(loader),
+                data_time, batch_time,
+                ' '.join(map(lambda name_values:
+                             '{}: {:.3f}'.format(name_values[0], np.mean(name_values[1])),
+                             metric_name_to_values.items()))
+            ))
+            end_time = time.time()
+
+    np.savez_compressed(
+        os.path.join(args.outroot, '{}_evaluation'.format(args.exp_name)),
+        paths=paths,
+        **metric_name_to_values,
+    )
 
 
 def cuda_if_available(x):

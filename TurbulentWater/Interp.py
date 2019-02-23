@@ -1,5 +1,8 @@
-import torch
 import numpy as np
+import torch
+import torch.nn.functional
+
+from globals import cuda_if_available
 
 
 def interp1(f,i):
@@ -82,6 +85,7 @@ def inverse_warp(im, di, dj):
 	:return: [num_batch, channels, height, width]
 	"""
 
+	# TODO: implement "splatting" griddata
 	num_batch, channels, height, width = im.shape
 	i, j = np.meshgrid(
 		np.arange(height),
@@ -101,3 +105,48 @@ def inverse_warp(im, di, dj):
 	jm[:, :, ii, jj] = im[:, :, i, j]
 
 	return jm
+
+
+# DEPRECATED
+def get_inverse_warp(di, dj):
+	# TODO: implement "splatting" griddata
+	num_batch, height, width = di.shape
+	i, j = np.meshgrid(
+		np.arange(height),
+		np.arange(width),
+		indexing='ij')
+	i = torch.from_numpy(i).unsqueeze(0).expand_as(di)
+	j = torch.from_numpy(j).unsqueeze(0).expand_as(dj)
+
+	if di.is_cuda:
+		i = i.cuda()
+		j = j.cuda()
+
+	ii = (i.float() + di).round().clamp(0, height - 1).long()
+	jj = (j.float() + dj).round().clamp(0, width - 1).long()
+
+	ddi = torch.zeros_like(di)
+	ddi[:, ii, jj] -= di[:, i, j]
+	ddj = torch.zeros_like(dj)
+	ddj[:, ii, jj] -= dj[:, i, j]
+
+	return ddi, ddj
+
+
+HORIZONTAL_DERIVATIVE = cuda_if_available(torch.FloatTensor([[[[-1, 0, 1]]]]))
+VERTICAL_DERIVATIVE = cuda_if_available(torch.FloatTensor([[[[-1, ], [0, ], [1, ]]]]))
+
+
+def gradient(im):
+	di = torch.nn.functional.conv2d(
+		im.unsqueeze(1),
+		VERTICAL_DERIVATIVE,
+		padding=(1, 0),
+	).squeeze(1)
+	dj = torch.nn.functional.conv2d(
+		im.unsqueeze(1),
+		HORIZONTAL_DERIVATIVE,
+		padding=(0, 1),
+	).squeeze(1)
+
+	return di, dj

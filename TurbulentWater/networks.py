@@ -22,6 +22,7 @@ class Model(nn.Module):
             'Z_VGG':args.weight_Z_VGG,
             'Z_Adv':args.weight_Z_Adv,
             'Z_invertability': args.weight_Z_invertability,
+            'Diff': args.weight_diff,
         }
 
         # networks
@@ -123,6 +124,11 @@ class Model(nn.Module):
                 # TODO: add to model output
                 Interp.inverse_warp(z, warp[:, 0, :, :], warp[:, 1, :, :]),
                 input)
+
+        if self.weights['Diff']:
+            warp_ii, warp_ij = Interp.gradient(warp[:, 0, :, :])
+            warp_ji, warp_jj = Interp.gradient(warp[:, 1, :, :])
+            losses['Diff'] = self.recon_criterion(warp_ij, warp_ji)
 
         return losses
 
