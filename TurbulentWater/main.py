@@ -277,20 +277,6 @@ def evaluate(loader, model, args, metric_name_to_function):
     )
 
 
-def cuda_if_available(x):
-    if torch.cuda.is_available():
-        x = x.cuda()
-
-    return x
-
-
-def map_location():
-    if torch.cuda.is_available():
-        return None
-
-    return 'cpu'
-
-
 if __name__ == '__main__':
     print(f'Using PyTorch version {torch.__version__} on {"gpu" if torch.cuda.is_available() else "cpu"}')
     main()
