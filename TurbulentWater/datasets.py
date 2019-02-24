@@ -182,7 +182,7 @@ class PairedImageFolder(data.Dataset):
         samples (list): List of (sample path, class_index) tuples
     """
 
-    def __init__(self, root1, root2, loader=default_loader, extensions=IMG_EXTENSIONS, transform=None, target_transform=None):
+    def __init__(self, root1, root2, loader=default_loader, extensions=IMG_EXTENSIONS, transform=None, target_transform=None, return_path=False):
         classes, class_to_idx = find_classes(root1)
         samples1 = make_dataset(root1, class_to_idx, extensions)
 
@@ -213,6 +213,7 @@ class PairedImageFolder(data.Dataset):
 
         self.transform = transform
         self.target_transform = target_transform
+        self.return_path = return_path
 
 
     def __getitem__(self, index):
@@ -231,8 +232,12 @@ class PairedImageFolder(data.Dataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return [sample1, sample2], target
+        return_value = [[sample1, sample2], target]
 
+        if self.return_path:
+            return_value.append(path)
+
+        return return_value
 
     def __len__(self):
         return len(self.samples)

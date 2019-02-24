@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+from collections import defaultdict
 
 import numpy as np
 import torch
@@ -102,7 +103,7 @@ def main():
         pairedtransforms.CenterCrop(256),
         pairedtransforms.ToTensor(),
         pairedtransforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    ]))
+    ]), return_path=True)
     test_data = ImageFolder(test_dir, transform=
     transforms.Compose([
         transforms.Resize(256),
@@ -146,20 +147,31 @@ def main():
 
     # if args.test only run test script
     if args.test:
-        evaluate(val_loader, model, args, metric_name_to_function)
+        evaluate(val_loader, model, args, metric_name_to_function, save=True)
         test(test_loader, model, args)
         return
 
     # main training loop
+    loss_name_to_values = defaultdict(list)
+
     for epoch in range(args.epochs):
-        train(train_loader, model, fixed_batch, epoch, args)
+        epoch_loss_name_to_values = train(train_loader, model, fixed_batch, epoch, args)
         torch.save(model.state_dict(), os.path.join(args.outroot, '%s_net.pth' % args.exp_name))
         evaluate(val_loader, model, args, metric_name_to_function)
         test(test_loader, model, args)
 
+        for loss_name, loss_values in epoch_loss_name_to_values.items():
+            loss_name_to_values[loss_name].extend(loss_values)
+
+        np.savez_compressed(
+            os.path.join(args.outroot, '%s_training.npz'.format(args.exp_name)),
+            **loss_name_to_values,
+        )
+
 
 def train(loader, model, fixed_batch, epoch, args):
     model.train()
+    loss_name_to_values = defaultdict(list)
 
     end_time = time.time()
     for i, ((input, target), _) in enumerate(loader):
@@ -176,6 +188,9 @@ def train(loader, model, fixed_batch, epoch, args):
                                                                   i, len(loader), data_time,
                                                                   batch_time) + model.print_losses(losses))
 
+        for loss_name, loss_value in losses.items():
+            loss_name_to_values[loss_name].append(loss_value)
+
         # visualize progress
         if i % 100 == 0:
             visualize(input, target, model, os.path.join(args.outroot, '%s_train.jpg' % args.exp_name))
@@ -187,6 +202,8 @@ def train(loader, model, fixed_batch, epoch, args):
 
         # if i==10:
         #    break
+
+    return loss_name_to_values
 
 
 def visualize(input, target, model, name):
@@ -233,7 +250,7 @@ def test(loader, model, args):
             #    break
 
 
-def evaluate(loader, model, args, metric_name_to_function):
+def evaluate(loader, model, args, metric_name_to_function, save=False):
     metric_name_to_values = {
         metric_name: list()
         for metric_name in metric_name_to_function.keys()
@@ -243,21 +260,28 @@ def evaluate(loader, model, args, metric_name_to_function):
     with torch.no_grad():
         end_time = time.time()
 
-        for i, ((input, target), names) in enumerate(loader):
+        for i, ((input, target), _, names) in enumerate(loader):
             input = cuda_if_available(input)
             data_time = time.time() - end_time
             x, warp, y, z = model(input, cc=False)
 
-            for image_true, image_predicted, name in zip(target, z, names):
+            for image_true, out, name in zip(target, z, names):
                 paths.append(name)
                 image_true = image_true.cpu().numpy().transpose((1, 2, 0))
-                image_predicted = image_predicted.cpu().numpy().transpose((1, 2, 0))
+                image_predicted = out.cpu().numpy().transpose((1, 2, 0))
 
                 for metric_name, metric_function in metric_name_to_function.items():
                     metric_name_to_values[metric_name].append(metric_function(
                         image_true,
                         image_predicted,
                     ))
+
+                if save:
+                    if not os.path.exists(os.path.join(args.outroot, '%s_val' % args.exp_name, os.path.dirname(name))):
+                        os.makedirs(os.path.join(args.outroot, '%s_val' % args.exp_name, os.path.dirname(name)))
+
+                    im = Image.fromarray((out * .5 + .5).mul(255).clamp(0, 255).byte().permute(1, 2, 0).cpu().numpy())
+                    im.save(os.path.join(args.outroot, '%s_val' % args.exp_name, name))
 
             batch_time = time.time() - end_time
             print('%s Evaluation: %04d/%04d time: %.3f %.3f %s' % (
