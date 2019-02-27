@@ -163,8 +163,9 @@ def main():
         for loss_name, loss_values in epoch_loss_name_to_values.items():
             loss_name_to_values[loss_name].extend(loss_values)
 
+        # TODO: convert to numpy before saving
         np.savez_compressed(
-            os.path.join(args.outroot, '%s_training.npz'.format(args.exp_name)),
+            os.path.join(args.outroot, '{}_training.npz'.format(args.exp_name)),
             **loss_name_to_values,
         )
 
